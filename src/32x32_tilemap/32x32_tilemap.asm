@@ -1,21 +1,31 @@
-;32x32 player tilemap patch
+;32×32 player tilemap patch
 ;by Ladida
 
 header : lorom
 
-org $00A300
+print ""
+print " 32×32 player tilemap patch v1.1 "
+print "            by Ladida            "
+print " =============================== "
+print ""
+
+incsrc ../shared/shared.asm
+
+!Freedata	= remap_rom($568000)	;> Needs to be 4 banks long
+
+org remap_rom($00A300)
 autoclean JML MarioGFXDMA
 
-org $00E370
+org remap_rom($00E370)
 BEQ +
-org $00E381
+org remap_rom($00E381)
 BNE +
-org $00E385
+org remap_rom($00E385)
 NOP #6
 +
 LDA #$F8
 
-org $00E3B0
+org remap_rom($00E3B0)
 TAX
 LDA.l excharactertilemap,x
 STA $0A
@@ -24,12 +34,12 @@ BRA +
 NOP #5
 +
 
-org $00E3E4
+org remap_rom($00E3E4)
 BRA +
-org $00E3EC
+org remap_rom($00E3EC)
 +
 
-org $00F636
+org remap_rom($00F636)
 JML tilemapmaker
 
 incsrc hexedits.asm
@@ -42,9 +52,9 @@ prot PlayerGFX
 MarioGFXDMA:
 REP #$20
 LDX #$02
-LDY $0D84
+LDY remap_ram($0D84)
 BNE +
-BRL .skipall
+JMP .skipall
 +
 
 ;;
@@ -55,7 +65,7 @@ LDY #$86
 STY $2121
 LDA #$2200
 STA $4310
-LDA $0D82
+LDA remap_ram($0D82)
 STA $4312
 LDY #$00
 STY $4314
@@ -77,7 +87,7 @@ LDA #$6040
 STA $2116
 LDX #$04
 -
-LDA $0D85,x
+LDA remap_ram($0D85),x
 STA $4312
 LDY #$7E
 STY $4314
@@ -86,7 +96,7 @@ STA $4315
 LDY #$02
 STY $420B
 INX #2
-CPX $0D84
+CPX remap_ram($0D84)
 BCC -
 
 ;;
@@ -97,7 +107,7 @@ LDA #$6140
 STA $2116
 LDX #$04
 -
-LDA $0D8F,x
+LDA remap_ram($0D8F),x
 STA $4312
 LDY #$7E
 STY $4314
@@ -106,7 +116,7 @@ STA $4315
 LDY #$02
 STY $420B
 INX #2
-CPX $0D84
+CPX remap_ram($0D84)
 BCC -
 
 ;;
@@ -114,7 +124,7 @@ BCC -
 ;;
 
 PEA $6000
-LDA $0D85 : PHA
+LDA remap_ram($0D85) : PHA
 
 LDX #$03
 -
@@ -122,7 +132,7 @@ LDA $03,s
 STA $2116
 LDA $01,s
 STA $4312
-LDY $0D87
+LDY remap_ram($0D87)
 STY $4314
 LDA #$0080
 STA $4315
@@ -144,7 +154,7 @@ PLA : PLA
 .skipall
 SEP #$20
 
-JML $00A38F
+JML remap_rom($00A38F)
 
 
 tilemapmaker:
@@ -158,16 +168,34 @@ LDA $09
 AND #$3C00
 ASL
 ORA $01,s
-STA $0D85
+STA remap_ram($0D85)
 LDY.b #PlayerGFX>>16
 BIT $09
+BPL +
+INY #$02
++
 BVC +
 INY
 +
-STY $0D87
+STY remap_ram($0D87)
 PLA
-JML $00F674
+JML remap_rom($00F674)
 
 incsrc excharactertilemap.asm
 
-incbin PlayerGFX.bin -> PlayerGFX
+print "PlayerGFX installed at: $", hex(PlayerGFX), " (pc: $", hex(snestopc(PlayerGFX)),")"
+;pushpc : freedata align : PlayerGFX: : pullpc
+;pushpc : freedata align : PlayerGFX: incbin PlayerGFX.bin : pullpc
+;incbin PlayerGFX.bin -> PlayerGFX
+
+org !Freedata-$8008
+	db $53,$54,$41,$52	;\ Asar complains when `db "STAR"` is encoutered
+	dw $FFFF	;| without the file starting with `;@xkas`, even
+	dw $0000	;/ when Asar only features are used
+org !Freedata
+	PlayerGFX:
+incbin PlayerGFX.bin -> !Freedata
+org !Freedata+$020000
+	db $53,$54,$41,$52
+	dw $FFF7
+	dw $0008
