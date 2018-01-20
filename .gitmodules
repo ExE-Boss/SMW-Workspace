@@ -1,0 +1,3 @@
+[submodule "rpg-hacker"]
+	path = rpg-hacker
+	url = git@github.com:RPGHacker/SMW-Workspace.git
