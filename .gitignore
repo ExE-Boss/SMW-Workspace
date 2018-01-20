@@ -1,0 +1,15 @@
+# Ignore All
+/*
+
+# Except:
+!LICENSE
+
+## Sources
+!/src
+
+## Git
+!/.gitattributes
+!/.gitignore
+!/README.md
+
+# Unwanted crap
