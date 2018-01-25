@@ -22,19 +22,25 @@ math	pri	on	;\ Asar defaults to Xkas settings instead
 math	round	off	;/ of proper math rules, this fixes that.
 
 print ""
-print " SMW Core Dump Patch 0.1 – © 2018 ExE Boss "
+print " SMW Core Dump Patch 0.2 – © 2018 ExE Boss "
 print "      Licensed under the GNU-LGPL 3.0      "
 print " ========================================= "
 print ""
 
-assert !Freespace&$FFFF == !Freespace "The Freespace variable must be in bank 0"
+assert !Freespace&$FFFF == !Freespace "The Freespace definition must be in bank 0"
 
 function get_crash_display_ram(X,Y) = ((X+(Y*$20))<<$1)
 
 !Freeram	#= select(!use_sa1_mapping,!FreeramSA1,!Freeram)	;> Use the SA-1 RAM when SA-1 is in use.
 
+!Dataram	= !Freeram+$740
+!TextData	= !Dataram+$00
+!TextSize	= !Dataram+$02
+!StackSize	= !Dataram+$7E
+
 org remap_rom(!Freespace)
 	autoclean JML BreakInterruptListener
+warnpc remap_rom(!Freespace+$04)
 
 org remap_rom($00FFE6)
 	dw !Freespace&$FFFF
@@ -62,22 +68,9 @@ BreakInterruptListener:
 	REP #$30	;> Set 16-bit A/X/Y registers
 	PHA : PHX : PHY	;> Backup all the things
 
-	SEP #$30	;> Set 8-bit A/X/Y registers
-	REP #$20	;> Set 16-bit A register
-	LDA $00 : PHA	;\ Backup $00
-	LDX $02 : PHX	;/
-
-.decompressTilemap:
-	LDA.w #!Freeram	;\ Write destination to $00
-	STA $00	;|
-	LDX.b #!Freeram>>$10	;|
-	STX $02	;/
-	LDA.w #!TilemapGFX	;\ Decompress tile map ExGFX to RAM
-	JSL remap_rom($0FF900)	;/
-
-	PLX : STX $02	;\ Restore $00
-	PLA : STA $00	;/
-	REP #$10	;> Set 16-bit X/Y registers
+	SEP #$20	;> Set 8-bit Accumulator
+	JSL PrepareTilemap
+	REP #$20	;> Set 16-bit Accumulator
 
 	LDA $5,s
 	%WriteA16ToRAM(!Accumulator_X,!Accumulator_Y)
@@ -94,12 +87,12 @@ BreakInterruptListener:
 
 	TDC
 	%WriteA16ToRAM(!DirectPage_X,!DirectPage_Y)
-	
+
 	LDA $8+$2,s
 	SEC : SBC.w #$2
 	%WriteA16ToRAM(!ProgramCounter_X+2,!ProgramCounter_Y)
 
-	SEP #$20	;> Set 8-bit A register
+	SEP #$20	;> Set 8-bit Accumulator
 
 	LDA $8+$4,s
 	%WriteA8ToRAM(!ProgramCounter_X,!ProgramCounter_Y)
@@ -110,12 +103,12 @@ BreakInterruptListener:
 	PHB : PLA
 	%WriteA8ToRAM(!DataBank_X,!DataBank_Y)
 
-	REP #$20	;> Set 16-bit A register
+	REP #$20	;> Set 16-bit Accumulator
 	LDY $00
 	LDX $01
 	LDA $8+$2,s : DEC
 	STA $00
-	SEP #$20	;> Set 8-bit A register
+	SEP #$20	;> Set 8-bit Accumulator
 	LDA $8+$4,s
 	STA $02
 	LDA [$00]
@@ -123,7 +116,7 @@ BreakInterruptListener:
 	STX $01
 	%WriteA8ToRAM(!BRKnumber_X,!BRKnumber_Y)
 
-	REP #$20	;> Set 16-bit A register
+	REP #$20	;> Set 16-bit Accumulator
 
 .writeStack:
 if !use_sa1_mapping
@@ -133,23 +126,23 @@ if !use_sa1_mapping
 ..snes:
 	LDA #$2000 ;> The SNES stack with the SA-1 is at $7E:0000-$7E:1FFF
 ...merge:
-	STA !Freeram+$07DE ;> Use the last two bytes of Freeram as the stack size
+	STA !StackSize ;> Use the last two bytes of Freeram as the stack size
 endif
 	PLA : TAY
 	LDX.w #get_crash_display_ram(!StackDump_X+1,!StackDump_Y)
 -	INY
 if !use_sa1_mapping
 	TYA	;\ With the SA-1, the SNES stack is 16 times larger.
-	CMP !Freeram+$07DE	;/ And we also have to make sure that we are compatible with the SA-1 stack.
+	CMP !StackSize	;/ And we also have to make sure that we are compatible with the SA-1 stack.
 else
 	CPY #$0200
 endif
-	SEP #$20	;> Set 8-bit A register
+	SEP #$20	;> Set 8-bit Accumulator
 	BCS .upload
 	LDA $0000,y
 	PHX
 	JSL WriteA8ToRAM
-	REP #$20	;> Set 16-bit A register
+	REP #$20	;> Set 16-bit Accumulator
 	PLA
 	CLC : ADC #$0020*2
 	CMP.w #get_crash_display_ram($1C,!StackDump_Y+$10)
@@ -161,9 +154,9 @@ endif
 	BRA -
 
 .upload:
-	SEP #$20 ;> Set 8-bit A register
+	SEP #$20 ;> Set 8-bit Accumulator
 if !use_sa1_mapping
-	LDA !Freeram+$07DF	;\ SA-1 sets this address to $38,
+	LDA !StackSize+1	;\ SA-1 sets this address to $38,
 	AND.b #$0F	;| whereas SNES sets this address to $20.
 	BEQ ..snes	;/
 
@@ -177,11 +170,15 @@ if !use_sa1_mapping
 	BEQ -	;|
 	STZ $018A	;|
 -	BRA -	;/ Spinlock self
-	
+
 ..snes:
+	SEI
 endif
-	JSL UploadToVRAM
+-	BIT $4212	;\ Wait for V-blank
+	BPL -	;/
+
 	JSL UploadToCGRAM
+	JSL UploadToVRAM
 	SEP #$30
 	JSL SetAPURegisters
 	JSL SetPPURegisters
@@ -206,9 +203,6 @@ SetPPURegisters:
 	STZ $2123	;\ Disable Window Mask
 	STZ $2124	;|
 	STZ $2125	;/
-	STZ $2121	;\ Set background colour to black
-	STZ $2122	;|
-	STZ $2122	;/
 	LDA #$54	;\ Make Layer 3 read the tilemap from $5400
 	STA $2109	;/
 	LDA #$0F	;\ Set max brightness
@@ -240,10 +234,36 @@ endif
 	RTL
 
 UploadToVRAM:
-	PHP	;\ Preserve Registers
-	SEP #%00100000	;| Set 8-bit A register
-	REP #%00010000	;/ Set 16-bit X/Y registers
+	SEP #$20	;\ Set 8-bit Accumulator
+	REP #$10	;/ Set 16-bit X/Y registers
 
+	JSL .uploadFont
+	JSL .uploadTilemap
+	RTL
+
+.uploadFont:
+	LDA #$80	;\ Set copy mode
+	STA $2115	;/
+	LDX #$4000	;\ Set target destination
+	STX $2116	;/
+
+	LDA.b #Font>>$10	;\ Set source bank, offset and size
+	LDX.w #Font	;|
+	LDY.w #(Font_end-Font)	;/
+
+	STX $4302	;\ Store data offset into DMA source offset
+	STA $4304	;| Store data bank into DMA source bank
+	STY $4305	;/ Store size of data block
+
+	LDA #$01	;\ Set DMA mode (word, normal increment)
+	STA $4300	;/
+	LDA #$18	;\ Set the destination register (VRAM write register)
+	STA $4301	;/
+	LDA #$01	;\ Initiate DMA transfer (channel 0)
+	STA $420B	;/
+	RTL
+
+.uploadTilemap:
 	LDA #$80	;\ Set copy mode
 	STA $2115	;/
 	LDX #$5400	;\ Set target destination
@@ -263,56 +283,36 @@ UploadToVRAM:
 	STA $4301	;/
 	LDA #$01	;\ Initiate DMA transfer (channel 0)
 	STA $420B	;/
-
-	PLP
 	RTL
 
 UploadToCGRAM:
-	PHP	;\ Preserve Registers
-	SEP #%00100000	;| Set 8-bit A register
-	REP #%00010000	;/ Set 16-bit X/Y registers
-	JSL .pal0
-	JSL .pal1
-	PLP
+	SEP #$30	;> 8-bit A/X/Y registers
+	STZ $2121
+	LDY #$20
+	LDX #$00
+
+-	TYA
+	AND #$03
+	BEQ .uploadBG
+	LDA.l PaletteData+$2,x
+	STA $2122
+	INX
+	LDA.l PaletteData+$2,x
+	STA $2122
+	INX
+--	DEY
+	BNE -
+
+	LDA #$E0	;\ Disable non-CGRAM background colour
+	STA $2132	;/
 	RTL
 
-.pal0:
-	LDA #$08	;\ Set target destination
-	STA $2121	;/
-
-	LDA #$00	;\ Set source bank, offset and size
-	LDX #$B170	;|
-	LDY #$0010	;/
-
-	STX $4302	;\ Store data offset into DMA source offset
-	STA $4304	;| Store data bank into DMA source bank
-	STY $4305	;/ Store size of data block
-
-	STZ $4300	;> Set DMA Mode (byte, normal increment)
-	LDA #$22	;\ Set destination register ($2122 - CGRAM Write)
-	STA $4301	;/
-	LDA #$01	;\ Initiate DMA transfer (channel 0)
-	STA $420B	;/
-	RTL
-
-.pal1:
-	LDA #$18	;\ Set target destination
-	STA $2121	;/
-
-	LDA #$00	;\ Set source bank, offset and size
-	LDX #$B180	;|
-	LDY #$0010	;/
-
-	STX $4302	;\ Store data offset into DMA source offset
-	STA $4304	;| Store data bank into DMA source bank
-	STY $4305	;/ Store size of data block
-
-	STZ $4300	;> Set DMA Mode (byte, normal increment)
-	LDA #$22	;\ Set destination register ($2122 - CGRAM Write)
-	STA $4301	;/
-	LDA #$01	;\ Initiate DMA transfer (channel 0)
-	STA $420B	;/
-	RTL
+.uploadBG:
+	LDA.l PaletteData
+	STA $2122
+	LDA.l PaletteData+$1
+	STA $2122
+	BRA --
 
 ; Writes the binary contents of the 8-bit A
 ; to the Freeram address specified by X
@@ -363,43 +363,160 @@ WriteA16ToRAM:
 ; Writes the HEX contents of the 8-bit A containing
 ; a <$10 value to the Freeram address specified by X
 WriteAtoRAMsub:
-	BEQ .eq0
-	CMP.b #$08
-	BEQ .eq8
-	BCC .lt8
-	CMP.b #$09
-	BEQ .eq9
+	CMP.b #$0A
+	BCC .num
 	CMP.b #36
 	BCC .b16
 
-	LDA.b #$5E
+	LDA.b #$0A
 	BRA .write
 
-.eq0:
-	LDA.b #$6B
-	BRA .write
-
-.lt8:
-	CLC : ADC.b #$64-$01
-	BRA .write
-
-.eq8:
-	LDA.b #!Number8
-	BRA .write
-
-.eq9:
-	LDA.b #!Number9
+.num:
+	ORA.b #$10
 	BRA .write
 
 .b16:
-	SEC : SBC.b #$0A
+	CLC : ADC.b #$21-$0A
 
 .write:
-	STA.l remap_ram(!Freeram),x
+	STA.l !Freeram,x
+	LDA #$20|((!CoreDumpPalette&$07)<<2)
+	STA.l !Freeram+1,x
 	RTL
+
+PrepareTilemap:
+	LDA #$00
+	LDX #$0800-$1
+
+-	STA.l !Freeram,x
+	DEX
+	BPL -
+
+	LDA $00 : PHA	;\ Backup $00
+	LDA $01 : PHA	;|
+	LDA $02 : PHA	;/
+	JSL WriteText_main
+	PLA : STA $02	;\ Restore $00
+	PLA : STA $01	;|
+	PLA : STA $00	;/
+	RTL
+
+WriteText:
+.main:
+	PHP
+	SEP #$10	;> 8-bit X/Y registers
+
+	LDY.b #$00
+-	TYA : STY $00
+	CMP.l TextPointers
+	BCS ..return
+	ASL : CLC : ADC $00 : TAX
+	REP #$20	;> 16-bit Accumulator
+	LDA.l TextPointers+1,x
+	STA $00
+	SEP #$20	;> 8-bit Accumulator
+	LDA.l TextPointers+3,x
+	STA $02
+	JSL .sub
+	INY
+	BRA -
+
+..return:
+	PLP
+	RTL
+
+; Writes UTF-8 text to the tilemap
+; ================================
+.sub:
+	PHA : PHX : PHY : PHP
+	SEP #$30	;> 8-bit A/X/Y registers
+
+	LDA [$00]	: STA.l !TextData	: INC $00	;\ Store text coordinates to RAM 
+	LDA [$00]	: STA.l !TextData+1	: INC $00	;/
+
+	REP #$20	;> 16-bit Accumulator
+	LDA [$00]	: STA.l !TextSize	;\ Store text size to RAM
+	INC $00	: INC $00	;/
+
+	REP #$10	;> 16-bit X/Y registers
+	LDY.w #$00
+	LDA.l !TextData	;\ Calculate index from coordinates
+	XBA : LSR #5	;|
+	AND #$7FE : TAX	;/
+	LDA #$0000
+
+-	REP #$20	;> 16-bit Accumulator
+	TYA
+	CMP.l !TextSize
+	BCS ..return
+	SEP #$20	;> 8-bit Accumulator
+	LDA [$00],y
+	JSL .writeCharacter
+	INY
+	CPX.w #(!Dataram-!Freeram-1)	;\ Ensure that we stay in screen bounds
+	BCC -	;/
+
+..return:
+	PLP : PLY : PLX : PLA
+	RTL
+
+.writeCharacter:
+	CMP #$20
+	BCC ..specialCharacter
+	CMP #$80
+	BCC ..normalCharacter
+	; TODO: Add support for multi-byte UTF-8 code points
+..return:
+	RTL
+
+..normalCharacter:
+	SEC : SBC #$20	;\ Convert code point to index in GFX file.
+	STA.l !Freeram,x	;/
+	INX
+	LDA.l !TextData+1	;\ Load text palette
+	LSR : AND #$1C	;/
+	ORA #$20	;> Set priority bit
+	STA.l !Freeram,x	;> Store XYPCCCTT to RAM
+	INX
+	BRA ..return
+
+..specialCharacter:
+	; There are $20 special code points in the Basic Latin/ASCII Unicode block,
+	; so let’s support only the important ones for now.
+	CMP #$0A
+	BEQ ...newline
+	CMP #$0D
+	BEQ ...dosNewline
+	BRA ..return
+
+...dosNewline:
+	INY	;\ Treat the sequence $0D,$0A as a single newline character
+	LDA [$00],y	;| instead of two
+	CMP #$0A	;|
+	BEQ ...newline	;|
+	DEY	;/
+...newline:
+	REP #$20	;> 16-bit Accumulator
+	TXA : AND.w #$07C0	;\ Increase the Y position
+	CLC : ADC.w #$0040	;/
+	PHA : LDA.l !TextData	;\ Reset the X position
+	XBA : LSR #5	;|
+	AND.w #$003E	;/
+	ORA $1,s	;\ Transfer Accumulator to X
+	PLX : TAX	;/
+	SEP #$20	;> 8-bit Accumulator
+	BRA ..return
+
+incsrc "core_dump_text.asm"
+Font:
+incbin "font.bin"
+.end:
 
 print "BRK Interrupt Vector installed at: $",hex(BreakInterruptListener)
 print "Using ($800) 2048 bytes of RAM at: $",hex(!Freeram)
+print ""
+print "Text pointers installed at: $",hex(TextPointers)
+print "Font installed at:          $",hex(Font)
 print ""
 if !AMK_installed : print "AMK detected, ensuring compatibility" : print ""
 print "Using ",freespaceuse," bytes of free ROM"
