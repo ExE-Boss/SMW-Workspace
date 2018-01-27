@@ -9,43 +9,57 @@
 ; NOTE 3:	If you're using UberASMTool, take advantage of the prot_file macro to insert your interleaved tilemap into your ROM without problems.
 ; NOTE 4:	This code is already SA-1 compatible as it uses direct page adressing ($XX adresses) and SNES registers ($2000+).
 
-	; To be put in a level's "init" hijack
-	LDA #$07			;\ Set BG Mode to 7.
-	STA $3E				;/
-	LDA #$80            ; \ Increase on $2119 write.
-	STA $2115           ; /
+; === ExE Boss’s Changes ===
+; I’ve modified the code so that you can create the Mode 7 graphics and tilemap separately by doing two consecutive
+; DMA uploads instead, one to upload the graphics and one to upload the tilemap.
+;
+; This allows storing the Graphics and Tilemap seperately, making editing easier,
+; since you can now use Mzuenni’s Graphics Editor (https://www.smwcentral.net/?p=section&a=details&id=15530),
+; which supports the SNES 8BPP and Mode 7 formats to edit the graphics.
+
+incsrc ../easy_mode7.cfg	;> Load configuration
+
+math	pri	on	;\ Asar defaults to Xkas settings instead
+math	round	off	;/ of proper math rules, this fixes that.
+
+Init: {
+	LDA #$07	;\ Set BG Mode to 7.
+;	ORA #$08	;|> Uncomment this line to enable the Layer 3 status bar (note that the Mode 7 background will get cut off if you try to move it behind the status bar)
+	STA $3E	;/
+
 	REP #$10
-	LDX #$0000			; \ Set where to write in VRAM...
-	STX $2116			; / ...and since Mode 7 is layer 1 we can just put $0000 here.
-	LDA #$01            ;\ Set mode to...
-	STA $4300           ;/ ...2 regs write once.
-	LDA #$18            ;\ 
-	STA $4301           ;/ Writing to $2118 AND $2119.
-	LDX.w #FileLabel    ;\  Adress where our data is.
-	STX $4302          	; | 
-	LDA.b #FileLabel>>16; | Bank where our data is.
-	STA $4304          	;/
-	LDX #$8000          ;\ Size of our data.
-	STX $4305           ;/
+	LDA.b #GFX>>$10	;\ Upload GFX
+	LDX.w #GFX	;|
+	LDY.w #$1	;|
+	JSL !UploadMode7gfxSubroutine|!bank	;/
+	LDA.b #Tilemap>>$10	;\ Upload Tilemap
+	LDX.w #Tilemap	;|
+	LDY.w #$2	;|
+	JSL !UploadMode7gfxSubroutine|!bank	;/
 	SEP #$10
-	LDA.b #$01	   		;\ Start DMA transfer on channel 0.
-	STA.w $420B	   		;/
 
-; The following code sets the Mode 7 registers so that you can see your whole tilemap rotate.
-
-	; To be put in a level's "main" hijack
 	REP #$20
-	LDA #$0180 : STA $2A	; \ Set effect center to tilemap center
-	LDA #$0180 : STA $2C	; /
-	STZ $36					; Set angle to 0°
-	LDA #$8080 : STA $38	; Set size to 25% so the whole tilemap is visible
-	LDA #$0180 : STA $3A	; \ Set layer position to tilemap center
-	LDA #$0180 : STA $3C	; /
+	LDA #$0180 : STA $2A	;\ Set effect center to tilemap center
+	LDA #$0180 : STA $2C	;/
+	STZ $36	;> Set angle to 0°
+	LDA #$8080 : STA $38	;> Set size to 25% so the whole tilemap is visible
+	LDA #$0180 : STA $3A	;\ Set layer position to tilemap center
+	LDA #$0180 : STA $3C	;/
 	SEP #$20
 
-	LDA $13D4|!addr		; If game is paused...
-	BNE .end			; ...skip this.
+	RTL
+}
+
+Main: {
+	LDA $13D4|!addr	; If game is paused...
+	BNE .end	; ...skip this.
 	REP #$20
-	INC $36				; Increment angle
+	INC $36	; Increment angle
 	SEP #$20
-	.end:
+
+.end:
+	RTL
+}
+
+%prot_file("TestFile.GFX.bin",	GFX)
+%prot_file("TestFile.Tilemap.bin",	Tilemap)
