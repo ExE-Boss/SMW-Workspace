@@ -11,4 +11,4 @@ ExE Boss’s Changes
 ------------------
 - Full compatibility with all of the original game’s Mode 7 bosses
 - Added a subroutine for uploading the Mode 7 GFX and tilemap to VRAM
-- The Layer 3 status bar can now enabled by setting the Layer 3 absolute priority bit of $3E, this then works the same way as in the Koopaling/Reznor battles by using IRQ to change the background mode at scanline $24 ($26 with Super Status Bar) to mode 1.
+- The Layer 3 status bar can now enabled by setting the Layer 3 absolute priority bit of $3E, this then works the same way as in the Koopaling/Reznor battles by using IRQ to change the background mode at scanline $24 ($26 with Super Status Bar).

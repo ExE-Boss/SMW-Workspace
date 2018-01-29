@@ -61,5 +61,5 @@ Main: {
 	RTL
 }
 
-%prot_file("TestFile.GFX.bin",	GFX)
-%prot_file("TestFile.Tilemap.bin",	Tilemap)
+%prot_file("TestFile.gfx.bin",	GFX)
+%prot_file("TestFile.tilemap.bin",	Tilemap)

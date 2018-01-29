@@ -132,6 +132,8 @@ Mode7Pos: {
 	JML remap_rom($00838A)
 
 .customMode7level:
+	LDA $3E
+	STA $2105
 	LDA remap_ram($0D9D)
 	STA $212C
 	LDA remap_ram($0D9E)
@@ -278,4 +280,3 @@ ResetMode7Registers: {
 print "Installed at $",hex(MirrorCheck)," using ",freespaceuse," bytes of free ROM"
 if (!UploadMode7gfxSubroutine) : print "Mode 7 graphics DMA subroutine located at: JSL $",hex(remap_rom(!UploadMode7gfxSubroutine))
 print ""
-
