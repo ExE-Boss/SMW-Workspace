@@ -3,6 +3,23 @@
 
 header : lorom
 
+	!dp = $0000
+	!addr = $0000
+	!sa1 = 0
+	!gsu = 0
+
+if read1($00FFD6) == $15
+	sfxrom
+	!dp = $6000
+	!addr = !dp
+	!gsu = 1
+elseif read1($00FFD5) == $23
+	sa1rom
+	!dp = $3000
+	!addr = $6000
+	!sa1 = 1
+endif
+
 org $00A300
 autoclean JML MarioGFXDMA
 
@@ -40,34 +57,37 @@ freecode
 prot PlayerGFX
 
 MarioGFXDMA:
-REP #$20
-LDX #$02
-LDY $0D84
+LDY $0D84|!addr
 BNE +
-BRL .skipall
+JMP .skipall
 +
+
+REP #$20
+LDY #$02
 
 ;;
 ;Mario's Palette
 ;;
 
-LDY #$86
-STY $2121
+LDX #$86
+STX $2121
 LDA #$2200
 STA $4310
-LDA $0D82
+LDA $0D82|!addr
 STA $4312
-LDY #$00
-STY $4314
+LDX #$00
+STX $4314
 LDA #$0014
 STA $4315
-STX $420B
+STY $420B
 
 
-LDY #$80
-STY $2115
+LDX #$80
+STX $2115
 LDA #$1801
 STA $4310
+LDX #$7E
+STX $4314
 
 ;;
 ;Misc top tiles (cape, yoshi, podoboo)
@@ -77,16 +97,13 @@ LDA #$6040
 STA $2116
 LDX #$04
 -
-LDA $0D85,x
+LDA $0D85|!addr,x
 STA $4312
-LDY #$7E
-STY $4314
 LDA #$0040
 STA $4315
-LDY #$02
 STY $420B
 INX #2
-CPX $0D84
+CPX $0D84|!addr
 BCC -
 
 ;;
@@ -97,54 +114,42 @@ LDA #$6140
 STA $2116
 LDX #$04
 -
-LDA $0D8F,x
+LDA $0D8F|!addr,x
 STA $4312
-LDY #$7E
-STY $4314
 LDA #$0040
 STA $4315
-LDY #$02
 STY $420B
 INX #2
-CPX $0D84
+CPX $0D84|!addr
 BCC -
 
 ;;
 ;New player GFX upload
 ;;
 
-PEA $6000
-LDA $0D85 : PHA
-
-LDX #$03
+LDX $0D87|!addr
+STX $4314
+LDA $0D86|!addr : PHA
+LDX #$06
 -
-LDA $03,s
+LDA.l .vramtbl,x
 STA $2116
-LDA $01,s
-STA $4312
-LDY $0D87
-STY $4314
 LDA #$0080
 STA $4315
-
-LDY #$02
+LDA $0D85|!addr
+STA $4312
 STY $420B
-
-LDA $03,s
-CLC : ADC #$0100
-STA $03,s
-LDA $01,s
-CLC : ADC #$0200
-STA $01,s
-
-DEX : BPL -
-
-PLA : PLA
-
-.skipall
+INC $0D86|!addr
+INC $0D86|!addr
+DEX #2 : BPL -
+PLA : STA $0D86|!addr
 SEP #$20
 
+.skipall
 JML $00A38F
+
+.vramtbl
+dw $6300,$6200,$6100,$6000
 
 
 tilemapmaker:
@@ -158,13 +163,13 @@ LDA $09
 AND #$3C00
 ASL
 ORA $01,s
-STA $0D85
+STA $0D85|!addr
 LDY.b #PlayerGFX>>16
 BIT $09
 BVC +
 INY
 +
-STY $0D87
+STY $0D87|!addr
 PLA
 JML $00F674
 
