@@ -15,7 +15,23 @@
 ## Dependencies
 !/rpg-hacker
 
+# Don’t commit ROMs
+# -----------------
+*.sfc
+*.smc
+*.srm
+
+## Or Lunar Magic ROM data
+sysLMRestore/
+*.m16
+*.s16
+
+## Or YY-CHR ROM jumplists
+*.smc.jumplist
+*.sfc.jumplist
+
 # Unwanted crap
+# -------------
 .DS_Store
 .DS_Store?
 ._*
