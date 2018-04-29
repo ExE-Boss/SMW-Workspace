@@ -4,7 +4,7 @@
 header : lorom
 
 print ""
-print " 32×32 player tilemap patch v1.1 "
+print " 32×32 player tilemap patch v1.2 "
 print "            by Ladida            "
 print " =============================== "
 print ""
@@ -50,34 +50,37 @@ freecode
 prot PlayerGFX
 
 MarioGFXDMA:
-REP #$20
-LDX #$02
 LDY remap_ram($0D84)
 BNE +
 JMP .skipall
 +
 
+REP #$20
+LDY #$02
+
 ;;
 ;Mario's Palette
 ;;
 
-LDY #$86
-STY $2121
+LDX #$86
+STX $2121
 LDA #$2200
 STA $4310
 LDA remap_ram($0D82)
 STA $4312
-LDY #$00
-STY $4314
+LDX #$00
+STX $4314
 LDA #$0014
 STA $4315
-STX $420B
+STY $420B
 
 
-LDY #$80
-STY $2115
+LDX #$80
+STX $2115
 LDA #$1801
 STA $4310
+LDX #$7E
+STX $4314
 
 ;;
 ;Misc top tiles (cape, yoshi, podoboo)
@@ -89,11 +92,8 @@ LDX #$04
 -
 LDA remap_ram($0D85),x
 STA $4312
-LDY #$7E
-STY $4314
 LDA #$0040
 STA $4315
-LDY #$02
 STY $420B
 INX #2
 CPX remap_ram($0D84)
@@ -109,11 +109,8 @@ LDX #$04
 -
 LDA remap_ram($0D8F),x
 STA $4312
-LDY #$7E
-STY $4314
 LDA #$0040
 STA $4315
-LDY #$02
 STY $420B
 INX #2
 CPX remap_ram($0D84)
@@ -123,38 +120,29 @@ BCC -
 ;New player GFX upload
 ;;
 
-PEA $6000
-LDA remap_ram($0D85) : PHA
-
-LDX #$03
+LDX remap_ram($0D87)
+STX $4314
+LDA remap_ram($0D86) : PHA
+LDX #$06
 -
-LDA $03,s
+LDA.l .vramtbl,x
 STA $2116
-LDA $01,s
-STA $4312
-LDY remap_ram($0D87)
-STY $4314
 LDA #$0080
 STA $4315
-
-LDY #$02
+LDA remap_ram($0D85)
+STA $4312
 STY $420B
-
-LDA $03,s
-CLC : ADC #$0100
-STA $03,s
-LDA $01,s
-CLC : ADC #$0200
-STA $01,s
-
-DEX : BPL -
-
-PLA : PLA
-
-.skipall
+INC remap_ram($0D86)
+INC remap_ram($0D86)
+DEX #2 : BPL -
+PLA : STA remap_ram($0D86)
 SEP #$20
 
+.skipall
 JML remap_rom($00A38F)
+
+.vramtbl
+dw $6300,$6200,$6100,$6000
 
 
 tilemapmaker:
