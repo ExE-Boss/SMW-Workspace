@@ -13,12 +13,15 @@
 ;by Ladida
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+incsrc 32x32_tilemap.cfg
+incsrc ../shared/shared.asm
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Everything below this can be edited
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-!mario	= $24	; palette value for Mario
-!mariox	= $64	; palette value for X-flipped Mario
+!mario	= $20|((!ow_mario_palette&$7)<<1)	; palette value for Mario
+!mariox	= $60|((!ow_mario_palette&$7)<<1)	; palette value for X-flipped Mario
 
 
 ;below are the palette values of the 'in water' tiles
@@ -204,11 +207,7 @@
 ;!!!!!!!!!!!!!!!GNINRAW!!!!!!!!!!!!!!
 
 
-
-header
-lorom
-
-org $0487CB
+org remap_rom($0487CB)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -324,7 +323,7 @@ db !climb2ur,!mariox,!climb2ul,!mariox,!climb2dr,!mariox,!climb2dl,!mariox
 ;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-org $0489DE
+org remap_rom($0489DE)
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

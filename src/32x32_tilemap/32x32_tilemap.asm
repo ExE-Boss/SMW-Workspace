@@ -1,7 +1,6 @@
+@asar 1.50
 ;32×32 player tilemap patch
 ;by Ladida
-
-header : lorom
 
 print ""
 print " 32×32 player tilemap patch v1.2 "
@@ -9,9 +8,32 @@ print "            by Ladida            "
 print " =============================== "
 print ""
 
+incsrc 32x32_tilemap.cfg
 incsrc ../shared/shared.asm
 
-!Freedata	= remap_rom($568000)	;> Needs to be 4 banks long
+math	pri	on	;\ Asar defaults to Xkas settings instead
+math	round	off	;/ of proper math rules, this fixes that.
+
+namespace _32x32_tilemap_
+
+;;;;;;;;;
+;Defines;
+;;;;;;;;;
+
+; DO NOT EDIT THOSE!!!
+
+!PlayerGFX_size #= select(equal(readfile1("PlayerGFX.bin",$10000,$FF),readfile1("PlayerGFX.bin",$10000,$00)),select(equal(readfile1("PlayerGFX.bin",$20000,$FF),readfile1("PlayerGFX.bin",$20000,$00)),$30000,$20000),$10000)
+assert !PlayerGFX_size >= 0, "PlayerGFX.bin not found"
+assert !PlayerGFX_size <= $20000, "PlayerGFX.bin is too big, must be at most 128KiB"
+
+assert !Freedata%$8000 == 0, "Freedata must point to the start of a bank"
+if !use_sa1_mapping
+	assert !Freedata&$7F0000 < $400000, "Freedata is currently unsupported in the SA-1 HiROM area"
+endif
+
+;;;;;;;;;
+;Hijacks;
+;;;;;;;;;
 
 org remap_rom($00A300)
 autoclean JML MarioGFXDMA
@@ -43,11 +65,21 @@ org remap_rom($00F636)
 JML tilemapmaker
 
 incsrc hexedits.asm
+incsrc ow_mario.asm
 
 
+;;;;;;;;;;;;;;;;;
+;MAIN CODE START;
+;;;;;;;;;;;;;;;;;
 
-freecode
-prot PlayerGFX
+freedata
+if !PlayerGFX_size > $10000
+	prot PlayerGFX,PlayerGFX_prot2
+else
+	prot PlayerGFX
+endif
+
+FreecodeStart:
 
 MarioGFXDMA:
 LDY remap_ram($0D84)
@@ -171,19 +203,27 @@ JML remap_rom($00F674)
 
 incsrc excharactertilemap.asm
 
-print "PlayerGFX installed at: $", hex(PlayerGFX), " (pc: $", hex(snestopc(PlayerGFX)),")"
-;pushpc : freedata align : PlayerGFX: : pullpc
-;pushpc : freedata align : PlayerGFX: incbin PlayerGFX.bin : pullpc
-;incbin PlayerGFX.bin -> PlayerGFX
+print "Patch inserted at $",hex(FreecodeStart)," (pc: $",hex(snestopc(FreecodeStart)),"), ",freespaceuse," bytes of free space used."
 
-org !Freedata-$8008
-	db $53,$54,$41,$52	;\ Asar complains when `db "STAR"` is encoutered
-	dw $FFFF	;| without the file starting with `;@xkas`, even
-	dw $0000	;/ when Asar only features are used
-org !Freedata
-	PlayerGFX:
-incbin PlayerGFX.bin -> !Freedata
-org !Freedata+$020000
-	db $53,$54,$41,$52
-	dw $FFF7
-	dw $0008
+reset freespaceuse
+
+!PlayerGFX_freespaceuse = freespaceuse
+if !PlayerGFX_size <= $10000
+	incbin PlayerGFX.bin -> PlayerGFX
+else
+	org remap_rom(!Freedata-$8008)
+		db $53,$54,$41,$52	;\ Asar complains when `db "STAR"` is encoutered
+		dw $FFFF	;| without the file starting with `;@xkas`, even
+		dw $0000	;/ when Asar only features are used
+	org remap_rom(!Freedata)
+		PlayerGFX:
+		incbin PlayerGFX.bin -> remap_rom(!Freedata)
+	org remap_rom(!Freedata+$20000)
+		db $53,$54,$41,$52
+		dw clamp(!PlayerGFX_size-$10009,0,$FFF7)
+		dw clamp(!PlayerGFX_size-$10009,0,$FFF7)^$FFFF
+		.prot2:
+endif
+
+print "PlayerGFX inserted at: $",hex(PlayerGFX)," (pc: $",hex(snestopc(PlayerGFX)),"), !PlayerGFX_size bytes of free space used."
+print ""
