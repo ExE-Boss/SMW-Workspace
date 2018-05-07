@@ -9,6 +9,9 @@
 !/.gitattributes
 !/.gitignore
 !/.gitmodules
+
+## GitHub
+!/.github
 !README*
 !LICENSE*
 
